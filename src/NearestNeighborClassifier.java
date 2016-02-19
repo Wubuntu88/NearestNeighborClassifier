@@ -17,6 +17,17 @@ public class NearestNeighborClassifier {
 			this.attrList = attrList;
 			this.label = label;
 		}
+
+		@Override
+		public String toString() {
+			StringBuffer sBuffer = new StringBuffer("");
+			for (double dub : this.attrList) {
+				sBuffer.append(dub + ", ");
+			}
+			sBuffer.replace(sBuffer.length() - 2, sBuffer.length(), " || ");
+			sBuffer.append(this.label);
+			return sBuffer.toString();
+		}
 	}
 
 	public static final String BINARY = "binary";
@@ -31,8 +42,10 @@ public class NearestNeighborClassifier {
 		try {
 			nnc.loadTrainingData("train3_use");
 		} catch (Exception e) {
+			System.out.println("error");
 			System.out.println(e.getMessage());
 		}
+		nnc.toString();
 	}
 
 	private int numberOfRecords;
@@ -44,7 +57,8 @@ public class NearestNeighborClassifier {
 
 	private boolean majorityRule;
 
-	// list of the type of the variables in the records
+	// list of the type of the variables in the records (ordinal, continuous,
+	// etc)
 	private ArrayList<String> attributeList = new ArrayList<>();
 
 	private ArrayList<Record> records = new ArrayList<>();
@@ -62,6 +76,34 @@ public class NearestNeighborClassifier {
 			listOfLabels.add(majorityLabel);
 		}
 		return listOfLabels;
+	}
+
+	private Record convertLineToRecord(String[] components) {
+		double[] currentRecordsAttributes = new double[components.length - 1];
+		int label = 0; // have to do something with the label
+		for (int columnIndex = 0; columnIndex < components.length
+				- 1; columnIndex++) {
+			String attributeDataType = this.attributeList.get(columnIndex);
+			switch (attributeDataType) {
+			case ORDINAL:
+				HashMap<String, Double> map = this.valsForOrdinalVarAtColumn
+						.get(columnIndex);
+				double dub = map.get(components[columnIndex]);
+				currentRecordsAttributes[columnIndex] = dub;
+				break;
+			case CONTINUOUS:
+
+				break;
+			case BINARY:// simple matching coefficient
+
+				break;
+			case NOMINAL:
+
+				break;
+			}
+			columnIndex++;
+		}
+		return null;
 	}
 
 	private double distance(Record record1, Record record2) {
@@ -97,8 +139,12 @@ public class NearestNeighborClassifier {
 	}
 
 	public void loadTrainingData(String fileName) throws Exception {
+
 		List<String> lines = Files.readAllLines(Paths.get(fileName),
 				Charset.defaultCharset());
+		for (String line : lines) {
+			// System.out.println(line);
+		}
 		// first line
 		String[] componentsOfFirstLine = lines.get(0).split(" ");
 		this.numberOfRecords = Integer.parseInt(componentsOfFirstLine[0]);
@@ -112,6 +158,7 @@ public class NearestNeighborClassifier {
 		this.distanceMeasure = Integer.parseInt(componentsOfSecondLine[1]);
 		this.majorityRule = Boolean.parseBoolean(componentsOfSecondLine[2]);
 
+		System.out.println(this.toString());
 		// third line reading the attribute types
 		String[] componentsOfThirdLine = lines.get(2).split(" ");
 		for (String attrType : componentsOfThirdLine) {
@@ -127,13 +174,14 @@ public class NearestNeighborClassifier {
 		// fourth line reading the ranges of the attribute types
 		// uses rangeAtColumn hash map
 		String[] listOfRanges = lines.get(3).split(" ");
-		for (int colIndex = 0; colIndex < listOfRanges.length; colIndex++) {
+		for (int colIndex = 0; colIndex < listOfRanges.length - 1; colIndex++) {
+			// range symbols are low to high
+			String[] strRange = listOfRanges[colIndex].split(",");
+			double[] range = new double[strRange.length];
 			String typeOfAttrAtIndex = this.attributeList.get(colIndex);
 			switch (typeOfAttrAtIndex) {
 			case ORDINAL:
 				// range symbols are low to high
-				String[] strRange = listOfRanges[colIndex].split(",");
-				double[] range = new double[strRange.length];
 				int index = 0;
 				for (String symbol : strRange) {
 					range[index] = index / (strRange.length - 1);
@@ -149,17 +197,27 @@ public class NearestNeighborClassifier {
 					index++;
 				}
 				this.rangeAtColumn.put(colIndex, range);
+				break;
 			case CONTINUOUS:
-				// TODO
+				range[0] = Double.parseDouble(strRange[0]);
+				range[1] = Double.parseDouble(strRange[1]);
+				this.rangeAtColumn.put(colIndex, range);
 				break;
 			case BINARY:
 				break;// no range for binary
 			case NOMINAL:
 				break;// no range for nominals
-
 			}
 		}
-	}
+
+		// now I have to get all of the records
+		for (int i = 4; i < lines.size(); i++) {
+			String line = lines.get(i);
+			String[] comps = line.split(" ");
+
+		}
+
+	}// end of loadTrainingData()
 
 	private int majorityLabel(ArrayList<Record> records) {
 		HashMap<Integer, Integer> labelFrequencies = new HashMap<>();
@@ -215,6 +273,20 @@ public class NearestNeighborClassifier {
 			assert nearestNeighbors.size() == distances.size();
 		}
 		return nearestNeighbors;
+	}
+
+	@Override
+	public String toString() {
+		StringBuffer sBuffer = new StringBuffer("");
+		sBuffer.append("# Of Attributes: " + this.numberOfAttributes + "\n");
+		sBuffer.append("# Of Classes: " + this.numberOfClasses + "\n");
+		sBuffer.append("# Of Records: " + this.numberOfRecords + "n");
+		// can add # of nearest neighbors, etc
+		for (Record record : this.records) {
+			sBuffer.append(record.toString() + "\n");
+		}
+		sBuffer.deleteCharAt(sBuffer.length() - 1);
+		return sBuffer.toString();
 	}
 
 }
