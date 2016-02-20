@@ -92,10 +92,11 @@ public class NearestNeighborClassifier {
 				currentRecordsAttributes[columnIndex] = dub;
 				break;
 			case CONTINUOUS:
-
+				//may need to normalize
+				currentRecordsAttributes[columnIndex] = Double.parseDouble(components[columnIndex]);
 				break;
 			case BINARY:// simple matching coefficient
-
+				
 				break;
 			case NOMINAL:
 
