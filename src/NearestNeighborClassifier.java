@@ -11,9 +11,9 @@ public class NearestNeighborClassifier {
 
 	private class Record {
 		double[] attrList;
-		int label;
+		String label;
 
-		public Record(double[] attrList, int label) {
+		public Record(double[] attrList, String label) {
 			this.attrList = attrList;
 			this.label = label;
 		}
@@ -31,11 +31,12 @@ public class NearestNeighborClassifier {
 	}
 
 	public static final String BINARY = "binary";
-	public static final String NOMINAL = "nominal";
+	public static final String CATEGORICAL = "categorical";
 	public static final String ORDINAL = "ordinal";
 	public static final String CONTINUOUS = "continuous";
+	public static final String LABEL = "label";
 	private static final TreeSet<String> attributeTypes = new TreeSet<String>(
-			Arrays.asList(BINARY, NOMINAL, ORDINAL, CONTINUOUS));
+			Arrays.asList(BINARY, CATEGORICAL, ORDINAL, CONTINUOUS, LABEL));
 
 	public static void main(String[] args) {
 		NearestNeighborClassifier nnc = new NearestNeighborClassifier();
@@ -45,7 +46,7 @@ public class NearestNeighborClassifier {
 			System.out.println("error");
 			System.out.println(e.getMessage());
 		}
-		nnc.toString();
+		System.out.println(nnc.toString());
 	}
 
 	private int numberOfRecords;
@@ -57,22 +58,26 @@ public class NearestNeighborClassifier {
 
 	private boolean majorityRule;
 
-	// list of the type of the variables in the records (ordinal, continuous,
-	// etc)
+	// list of the type of the variables in records (ordinal, continuous, etc)
 	private ArrayList<String> attributeList = new ArrayList<>();
 
 	private ArrayList<Record> records = new ArrayList<>();
 
 	// for continuous variables (key is column, value is range (array of len 2)
 	private HashMap<Integer, double[]> rangeAtColumn = new HashMap<>();
+	// for ordinal variables
 	private HashMap<Integer, HashMap<String, Double>> valsForOrdinalVarAtColumn = new HashMap<>();
+	//for binary variables
+	private HashMap<String, Integer> binaryNameToIntSymbol = new HashMap<>();
+	//for categorical variables
+	private HashMap<String, Integer> categoricalNameToIntSymbol = new HashMap<>();
 
-	private ArrayList<Integer> classify(ArrayList<Record> testRecords) {
+	private ArrayList<String> classify(ArrayList<Record> testRecords) {
 		// labels of the classified records
-		ArrayList<Integer> listOfLabels = new ArrayList<>();
+		ArrayList<String> listOfLabels = new ArrayList<>();
 		for (Record record : testRecords) {
 			ArrayList<Record> nearestNeighbors = this.nearestNeighbors(record);
-			int majorityLabel = this.majorityLabel(nearestNeighbors);
+			String majorityLabel = this.majorityLabel(nearestNeighbors);
 			listOfLabels.add(majorityLabel);
 		}
 		return listOfLabels;
@@ -96,10 +101,10 @@ public class NearestNeighborClassifier {
 				currentRecordsAttributes[columnIndex] = Double.parseDouble(components[columnIndex]);
 				break;
 			case BINARY:// simple matching coefficient
-				
+				System.out.println("no binary conversion");
 				break;
-			case NOMINAL:
-
+			case CATEGORICAL:
+				System.out.println("no no categorical conversion");
 				break;
 			}
 			columnIndex++;
@@ -117,7 +122,7 @@ public class NearestNeighborClassifier {
 				distances[i] = (int) record1.attrList[i] != (int) record2.attrList[i]
 						? 1 : 0;
 				break;
-			case NOMINAL:
+			case CATEGORICAL:
 				distances[i] = (int) record1.attrList[i] != (int) record2.attrList[i]
 						? 1 : 0;
 				break;
@@ -159,7 +164,6 @@ public class NearestNeighborClassifier {
 		this.distanceMeasure = Integer.parseInt(componentsOfSecondLine[1]);
 		this.majorityRule = Boolean.parseBoolean(componentsOfSecondLine[2]);
 
-		System.out.println(this.toString());
 		// third line reading the attribute types
 		String[] componentsOfThirdLine = lines.get(2).split(" ");
 		for (String attrType : componentsOfThirdLine) {
@@ -171,7 +175,11 @@ public class NearestNeighborClassifier {
 						"attribute in file not one of the correct attributes");
 			}
 		}
-
+		//for binary variables
+		int binaryVariableCounter = 0;
+		//for categorical variables
+		int categoricalVariableCounter = 0;
+		
 		// fourth line reading the ranges of the attribute types
 		// uses rangeAtColumn hash map
 		String[] listOfRanges = lines.get(3).split(" ");
@@ -185,7 +193,7 @@ public class NearestNeighborClassifier {
 				// range symbols are low to high
 				int index = 0;
 				for (String symbol : strRange) {
-					range[index] = index / (strRange.length - 1);
+					range[index] = (double)index / (strRange.length - 1);
 					if (this.valsForOrdinalVarAtColumn.containsKey(colIndex)) {
 						HashMap<String, Double> map = this.valsForOrdinalVarAtColumn
 								.get(colIndex);
@@ -205,41 +213,79 @@ public class NearestNeighborClassifier {
 				this.rangeAtColumn.put(colIndex, range);
 				break;
 			case BINARY:
-				break;// no range for binary
-			case NOMINAL:
-				break;// no range for nominals
+				for(String binaryName: strRange){
+					binaryNameToIntSymbol.put(binaryName, binaryVariableCounter);
+					binaryVariableCounter++;
+				}
+				break;// do later because first file doesn't have binary
+			case CATEGORICAL:
+				for(String categoricalName: strRange){
+					binaryNameToIntSymbol.put(categoricalName, categoricalVariableCounter);
+					categoricalVariableCounter++;
+				}
+				break;
 			}
 		}
-
 		// now I have to get all of the records
 		for (int i = 4; i < lines.size(); i++) {
 			String line = lines.get(i);
 			String[] comps = line.split(" ");
-
+			double[] attrs = new double[comps.length - 1];
+			String label = comps[comps.length - 1];
+			for(int colIndex = 0; colIndex < comps.length - 1; colIndex++){
+				String stringValAtColIndex = comps[colIndex];
+				String typeOfAttr = attributeList.get(colIndex);
+				switch (typeOfAttr) {
+				case ORDINAL:
+					HashMap<String, Double> levelOfOrdinalToDoubleAmount = valsForOrdinalVarAtColumn.get(colIndex);
+					double dub = levelOfOrdinalToDoubleAmount.get(stringValAtColIndex);
+					attrs[colIndex] = dub;
+					break;
+				case CONTINUOUS://will have to normalize after
+					double amountAtColIndex = Double.parseDouble(stringValAtColIndex);
+					attrs[colIndex] = amountAtColIndex;
+					break;
+				case BINARY:
+					break;
+				case CATEGORICAL:
+					break;
+				}
+			}
+			Record recordToAdd = new Record(attrs, label);
+			records.add(recordToAdd);
 		}
-
+		//normalizing continuous variables in records so that they range from 0 to 1
+		for(Record record: records){
+			for(int index = 0; index < record.attrList.length;index++){
+				if(attributeList.get(index).equals(CONTINUOUS)){
+					double[] rangeAtCol = rangeAtColumn.get(index);
+					double max = rangeAtCol[1];
+					double min = rangeAtCol[0];
+					record.attrList[index] = (record.attrList[index] - min) / (max - min);
+				}
+			}
+		}
 	}// end of loadTrainingData()
 
-	private int majorityLabel(ArrayList<Record> records) {
-		HashMap<Integer, Integer> labelFrequencies = new HashMap<>();
+	private String majorityLabel(ArrayList<Record> records) {
+		HashMap<String, Integer> labelFrequencies = new HashMap<>();
 		for (Record record : records) {
 			if (labelFrequencies.containsKey(record.label)) {
 				labelFrequencies.put(record.label,
-						labelFrequencies.get(record.label) + 1);// increment by
-																// 1
+						labelFrequencies.get(record.label) + 1);
 			} else {
 				labelFrequencies.put(record.label, 1);
 			}
 		}
 
 		int maxFreq = -1;
-		int maxLabel = -1;
-		for (Integer labelKey : labelFrequencies.keySet()) {
+		String maxLabel = null;
+		for (String labelKey : labelFrequencies.keySet()) {
 			if (labelFrequencies.get(labelKey) > maxFreq) {
 				maxLabel = labelKey;
 			}
 		}
-		assert maxLabel != -1;
+		assert maxLabel != null;
 		return maxLabel;
 	}
 
@@ -281,7 +327,7 @@ public class NearestNeighborClassifier {
 		StringBuffer sBuffer = new StringBuffer("");
 		sBuffer.append("# Of Attributes: " + this.numberOfAttributes + "\n");
 		sBuffer.append("# Of Classes: " + this.numberOfClasses + "\n");
-		sBuffer.append("# Of Records: " + this.numberOfRecords + "n");
+		sBuffer.append("# Of Records: " + this.numberOfRecords + "\n");
 		// can add # of nearest neighbors, etc
 		for (Record record : this.records) {
 			sBuffer.append(record.toString() + "\n");
