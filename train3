@@ -1,9 +1,7 @@
-
-score: 0-100
-gpa: 0-4
-grade: A, B, C
-class: good, average, bad
-
+50 3 3
+3 0 true  //kNearestNeighbors distMesure(0 because I don't know what to put) majRule
+continuous continuous ordinal label
+0,100 0,4 C,B,A good,bad,average
 30 3.36 C bad
 53 3.41 A bad
 91 2.65 B average
