@@ -15,31 +15,6 @@ import com.sun.xml.internal.bind.v2.runtime.unmarshaller.XsiNilLoader.Array;
 
 public class NearestNeighborClassifier {
 
-	private class Record {
-		double[] attrList;
-		String label;
-
-		public Record(double[] attrList, String label) {
-			this.attrList = attrList;
-			this.label = label;
-		}
-		
-		public int numberOfAttributes(){
-			return attrList.length;
-		}
-
-		@Override
-		public String toString() {
-			StringBuffer sBuffer = new StringBuffer("");
-			for (double dub : this.attrList) {
-				sBuffer.append(String.format("%.2f", dub) + ", ");
-			}
-			sBuffer.replace(sBuffer.length() - 2, sBuffer.length(), " || ");
-			sBuffer.append(this.label);
-			return sBuffer.toString();
-		}
-	}
-
 	public static final String BINARY = "binary";
 	public static final String CATEGORICAL = "categorical";
 	public static final String ORDINAL = "ordinal";
@@ -47,92 +22,6 @@ public class NearestNeighborClassifier {
 	public static final String LABEL = "label";
 	private static final TreeSet<String> attributeTypes = new TreeSet<String>(
 			Arrays.asList(BINARY, CATEGORICAL, ORDINAL, CONTINUOUS, LABEL));
-
-	/*
-	 * *********************************************************
-	 * MAIN METHOD
-	 * *********************************************************
-	 */
-	public static void main(String[] args) {
-		/*
-		 * #2 nearest Neighbor on scores
-		 */
-		NearestNeighborClassifier nnc = new NearestNeighborClassifier();
-		
-		
-		/*
-		 * #3 bank loan risk classification
-		 */
-		String bankTranindDataFileName = "train4";
-		String bankTestDataFileName = "test4";
-		String bankClassifiedRecordsOutputFileName = "output4";
-		nnc = new NearestNeighborClassifier();
-		try {
-			nnc.loadTrainingData(bankTranindDataFileName); // bank training data
-		} catch (Exception e) {	e.printStackTrace();	}
-		
-		/* A: classification of test records */
-		ArrayList<Record> BankTestRecords = null;
-		try {
-			BankTestRecords = nnc.getTestRecordsFromFile(bankTestDataFileName);
-			ArrayList<String> listOfLabels = nnc.classify(BankTestRecords);
-			nnc.writeClassifiedLabelsToFile(bankClassifiedRecordsOutputFileName, listOfLabels);
-		} catch (Exception e) {	e.printStackTrace();	}
-		
-		/* B: training error */
-		double trainingError = nnc.calculateTrainingError();
-		System.out.println("training error: " + trainingError);
-		/* C: one out validation error */
-		double trainErrorOneOut = nnc.calculateTrainingErrorWithLeaveOneOut();
-		System.out.println("One out validation error: " + trainErrorOneOut);
-			
-		/*
-		 * **Part 4: classification of digits
-		 */
-		
-		nnc = new NearestNeighborClassifier(); // start over with new nearest neighbor classifier
-		
-		String[] theFileNames = new String[]{
-				"0_1", "0_2", "0_3", "0_4", "0_5",
-				"1_1", "1_2", "1_3", "1_4", "1_5",
-				"2_1", "2_2", "2_3", "2_4", "2_5",
-				"3_1", "3_2", "3_3", "3_4", "3_5"
-		};
-		ArrayList<String> fileNames = new ArrayList<>(Arrays.asList(theFileNames));
-		ArrayList<String> labels = new ArrayList<>();
-		for(String nameOfDigit: fileNames){
-			labels.add(nameOfDigit.substring(0, 1));
-		}
-		nnc.loadDigitTrainingData(fileNames, labels);
-		for(int index = 0; index < nnc.records.get(0).numberOfAttributes();index++){
-			nnc.attributeList.add(BINARY);
-		}
-		
-		String[] theTestFileNames = new String[] {
-				"0_test", "1_test", "2_test", "3_test"
-		};
-		ArrayList<String> testFileNames = new ArrayList<>(Arrays.asList(theTestFileNames));
-		ArrayList<String> testLabels = new ArrayList<>();
-		for(String theTestFileName: testFileNames){
-			testLabels.add(theTestFileName.substring(0, 1));
-		}
-		ArrayList<Record> testRecords = new ArrayList<>();
-		int fileNumber = 0;
-		for(String fileName:testFileNames){
-			List<String> linesOfFile = null;
-			try {
-				linesOfFile = Files.readAllLines(Paths.get(fileName),
-						Charset.defaultCharset());
-			} catch (IOException e) {	e.printStackTrace();	}
-			
-			Record record = nnc.digitRecordFromLines(linesOfFile);
-			record.label = labels.get(fileNumber);
-			testRecords.add(record);
-			fileNumber++;
-		}
-		
-		nnc.classify(testRecords);
-	}
 	
 	private final double CATEGORICAL_MATCHING_WEIGHT = 0.4;
 	private final double BINARY_MATCHING_WEIGHT = 0.4;
@@ -149,7 +38,15 @@ public class NearestNeighborClassifier {
 	// list of the type of the variables in records (ordinal, continuous, etc)
 	private ArrayList<String> attributeList = new ArrayList<>();
 
+	public ArrayList<String> getAttributeList() {
+		return attributeList;
+	}
+
 	private ArrayList<Record> records = new ArrayList<>();
+
+	public ArrayList<Record> getRecords() {
+		return records;
+	}
 
 	// for continuous variables (key is column, value is range (array of len 2)
 	private HashMap<Integer, double[]> rangeAtColumn = new HashMap<>();
@@ -160,7 +57,7 @@ public class NearestNeighborClassifier {
 	//for categorical variables
 	private HashMap<String, Integer> categoricalNameToIntSymbol = new HashMap<>();
 
-	private ArrayList<String> classify(ArrayList<Record> testRecords) {
+	public ArrayList<String> classify(ArrayList<Record> testRecords) {
 		// labels of the classified records
 		ArrayList<String> listOfLabels = new ArrayList<>();
 		for (Record record : testRecords) {
@@ -177,7 +74,7 @@ public class NearestNeighborClassifier {
 		return listOfLabels;
 	}
 	
-	private void writeClassifiedLabelsToFile(String fileName, ArrayList<String> labels){
+	public void writeClassifiedLabelsToFile(String fileName, ArrayList<String> labels){
 		PrintWriter pw = null;
 		try {
 			pw = new PrintWriter(fileName);
@@ -193,7 +90,7 @@ public class NearestNeighborClassifier {
 		pw.close();
 	}
 	
-	private ArrayList<Record> getTestRecordsFromFile(String fileName) throws Exception{
+	public ArrayList<Record> getTestRecordsFromFile(String fileName) throws Exception{
 		ArrayList<Record> testRecords = new ArrayList<>();
 		List<String> lines = Files.readAllLines(Paths.get(fileName),
 				Charset.defaultCharset());
@@ -263,7 +160,7 @@ public class NearestNeighborClassifier {
 		return Math.sqrt(sumOfSquares);
 	}
 	
-	private void loadDigitTrainingData(ArrayList<String> fileNames, ArrayList<String> labels){
+	public void loadDigitTrainingData(ArrayList<String> fileNames, ArrayList<String> labels){
 		this.numberOfNearestNeighbors = 3;
 		int fileNumber = 0;
 		for(String fileName:fileNames){
@@ -283,13 +180,13 @@ public class NearestNeighborClassifier {
 		this.numberOfClasses = 4;
 		this.numberOfRecords = records.size();
 	}
-	private Record digitRecordFromLines(List<String> lines){
+	public Record digitRecordFromLines(List<String> lines){
 		ArrayList<Double> vector = new ArrayList<>();
 		for(String line: lines){
 			for(int index = 0; index < line.length();index++){
-				if(line.charAt(index) == '#'){
+				if(line.charAt(index) == '1'){
 					vector.add(1.0);
-				}else if(line.charAt(index) == '-'){
+				}else if(line.charAt(index) == '0'){
 					vector.add(0.0);
 				}
 			}
@@ -480,7 +377,7 @@ public class NearestNeighborClassifier {
 		return nearestNeighbors;
 	}
 	
-	private double calculateTrainingError(){
+	public double calculateTrainingError(){
 		int numberOfMissclassifiedRecords = 0;
 		ArrayList<String> predictedLabels = classify(records);
 		assert predictedLabels.size() == records.size();
@@ -494,7 +391,7 @@ public class NearestNeighborClassifier {
 		return (double)numberOfMissclassifiedRecords / records.size();
 	}
 	
-	private double calculateTrainingErrorWithLeaveOneOut(){
+	public double calculateTrainingErrorWithLeaveOneOut(){
 		int numberOfMissclassifiedRecords = 0;
 		//ArrayList<String> predictedLabels = new ArrayList<String>();
 		for(int index = 0; index < records.size();index++){
