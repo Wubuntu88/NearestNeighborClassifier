@@ -1,18 +1,14 @@
 import java.util.ArrayList;
 
-public class Driver3Bank {
+public class Driver_initial {
+	/*
+	 * Driver that performs the task of part 2 of the nearest neighbor classifier
+	 */
 	public static void main(String[] args) {
-		/*
-		 * #2 nearest Neighbor on scores
-		 */
 		NearestNeighborClassifier nnc = new NearestNeighborClassifier();
-
-		/*
-		 * #3 bank loan risk classification
-		 */
-		String bankTranindDataFileName = "train4";
-		String bankTestDataFileName = "test4";
-		String bankClassifiedRecordsOutputFileName = "output4";
+		String bankTranindDataFileName = "train3";
+		String bankTestDataFileName = "test3";
+		String bankClassifiedRecordsOutputFileName = "output3";
 		nnc = new NearestNeighborClassifier();
 		try {
 			nnc.loadTrainingData(bankTranindDataFileName); // bank training data
@@ -31,11 +27,16 @@ public class Driver3Bank {
 			e.printStackTrace();
 		}
 
-		/* B: training error */
+		nnc.setNumberOfNearestNeighbors(3);
+		// nnc.setNumberOfNearestNeighbors(10);
+		// nnc.setNumberOfNearestNeighbors(20);
+		nnc.setMajorityRule(true);// false is weighted majority
+		/* C: training error */
 		double trainingError = nnc.calculateTrainingError();
 		System.out.println("training error: " + trainingError);
-		/* C: one out validation error */
+		/* D: one out validation error */
 		double trainErrorOneOut = nnc.calculateTrainingErrorWithLeaveOneOut();
 		System.out.println("One out validation error: " + trainErrorOneOut);
 	}
+
 }

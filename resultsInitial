@@ -1,0 +1,20 @@
+William Gillespie results for first part of Nearest neighbor.
+**using weighted majority and nearest neighbor: 3**
+training error: 0.62
+One out validation error: 0.0
+**using weighted majority and nearest neighbor: 10**
+training error: 0.62
+One out validation error: 0.0
+**using weighted majority and nearest neighbor: 20**
+training error: 0.62
+One out validation error: 0.0
+
+**using normal majority rule and nearest neighbor: 3**
+training error: 0.1
+One out validation error: 0.28
+**using normal majority rule and nearest neighbor: 10**
+training error: 0.26
+One out validation error: 0.32
+**using normal majority rule and nearest neighbor: 20**
+training error: 0.32
+One out validation error: 0.44

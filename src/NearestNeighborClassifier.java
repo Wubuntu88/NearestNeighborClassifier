@@ -10,9 +10,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.TreeSet;
 
-import com.sun.org.apache.bcel.internal.generic.RETURN;
-import com.sun.xml.internal.bind.v2.runtime.unmarshaller.XsiNilLoader.Array;
-
 public class NearestNeighborClassifier {
 
 	public static final String BINARY = "binary";
@@ -22,7 +19,7 @@ public class NearestNeighborClassifier {
 	public static final String LABEL = "label";
 	private static final TreeSet<String> attributeTypes = new TreeSet<String>(
 			Arrays.asList(BINARY, CATEGORICAL, ORDINAL, CONTINUOUS, LABEL));
-	
+
 	private final double CATEGORICAL_MATCHING_WEIGHT = 0.4;
 	private final double BINARY_MATCHING_WEIGHT = 0.4;
 
@@ -31,101 +28,103 @@ public class NearestNeighborClassifier {
 
 	private int numberOfClasses;
 	private int numberOfNearestNeighbors;
-	private int distanceMeasure;// ?? is this the right type ??
+	private int distanceMeasure;
 
-	private boolean majorityRule;
+	private boolean majorityRule = true;// weighted majority: false
 
 	// list of the type of the variables in records (ordinal, continuous, etc)
 	private ArrayList<String> attributeList = new ArrayList<>();
 
-	public ArrayList<String> getAttributeList() {
-		return attributeList;
-	}
-
 	private ArrayList<Record> records = new ArrayList<>();
-
-	public ArrayList<Record> getRecords() {
-		return records;
-	}
 
 	// for continuous variables (key is column, value is range (array of len 2)
 	private HashMap<Integer, double[]> rangeAtColumn = new HashMap<>();
+
 	// for ordinal variables
 	private HashMap<Integer, HashMap<String, Double>> valsForOrdinalVarAtColumn = new HashMap<>();
-	//for binary variables
+
+	// for binary variables
 	private HashMap<String, Integer> binaryNameToIntSymbol = new HashMap<>();
-	//for categorical variables
+
+	// for categorical variables
 	private HashMap<String, Integer> categoricalNameToIntSymbol = new HashMap<>();
+
+	public double calculateTrainingError() {
+		int numberOfMissclassifiedRecords = 0;
+		ArrayList<String> predictedLabels = this.classify(this.records);
+		assert predictedLabels.size() == this.records.size();
+		int rowIndex = 0;
+		for (Record record : this.records) {
+			if (record.label.equals(predictedLabels.get(rowIndex)) == false) {
+				numberOfMissclassifiedRecords++;
+			}
+			rowIndex++;
+		}
+		return (double) numberOfMissclassifiedRecords / this.records.size();
+	}
+
+	public double calculateTrainingErrorWithLeaveOneOut() {
+		int numberOfMissclassifiedRecords = 0;
+		// ArrayList<String> predictedLabels = new ArrayList<String>();
+		for (int index = 0; index < this.records.size(); index++) {
+			Record recordToClassify = this.records.remove(index);
+			ArrayList<Record> recordInList = new ArrayList<>();
+			recordInList.add(recordToClassify);
+			String label = this.classify(recordInList).get(0);
+			if (recordToClassify.label.equals(label) == false) {
+				numberOfMissclassifiedRecords++;
+			}
+			this.records.add(0, recordToClassify);
+		}
+		return (double) numberOfMissclassifiedRecords / this.records.size();
+	}
 
 	public ArrayList<String> classify(ArrayList<Record> testRecords) {
 		// labels of the classified records
 		ArrayList<String> listOfLabels = new ArrayList<>();
-		for (Record record : testRecords) {
-			ArrayList<Record> nearestNeighbors = this.nearestNeighbors(record);
-			String majorityLabel = this.majorityLabel(nearestNeighbors);
+		for (Record testRecord : testRecords) {
+			ArrayList<Record> nearestNeighbors = this
+					.nearestNeighbors(testRecord);
+			String majorityLabel;
+			if (this.majorityRule) {
+				majorityLabel = this.majorityLabel(nearestNeighbors);
+			} else {
+				ArrayList<Double> distances = new ArrayList<>();
+				for (Record theRecord : nearestNeighbors) {
+					distances.add(this.distance(testRecord, theRecord));
+				}
+				majorityLabel = this.majorityLabelWeighted(testRecords,
+						distances);
+			}
 			listOfLabels.add(majorityLabel);
-			System.out.println("Record to classify: " + record);
+			System.out.println("Record to classify: " + testRecord);
 			System.out.println("Nearest Neighbors");
-			for(Record record2: nearestNeighbors){
+			for (Record record2 : nearestNeighbors) {
 				System.out.println(record2);
 			}
-			System.out.println("classified as (majority class): " + majorityLabel + "\n");		
+			System.out.println(
+					"classified as (majority class): " + majorityLabel + "\n");
 		}
 		return listOfLabels;
 	}
-	
-	public void writeClassifiedLabelsToFile(String fileName, ArrayList<String> labels){
-		PrintWriter pw = null;
-		try {
-			pw = new PrintWriter(fileName);
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		}
-		StringBuffer sBuffer = new StringBuffer("");
-		for(String label: labels){
-			sBuffer.append(label + "\n");
-		}
-		sBuffer.delete(sBuffer.length() - 1, sBuffer.length());
-		pw.write(sBuffer.toString());
-		pw.close();
-	}
-	
-	public ArrayList<Record> getTestRecordsFromFile(String fileName) throws Exception{
-		ArrayList<Record> testRecords = new ArrayList<>();
-		List<String> lines = Files.readAllLines(Paths.get(fileName),
-				Charset.defaultCharset());
-		for (int i = 0; i < lines.size(); i++) {
-			String line = lines.get(i);
-			String[] comps = line.split(" ");
-			double[] attrs = new double[comps.length];
-			for(int colIndex = 0; colIndex < comps.length; colIndex++){
-				String stringValAtColIndex = comps[colIndex];
-				String typeOfAttr = attributeList.get(colIndex);
-				switch (typeOfAttr) {
-				case ORDINAL:
-					HashMap<String, Double> levelOfOrdinalToDoubleAmount = valsForOrdinalVarAtColumn.get(colIndex);
-					double dub = levelOfOrdinalToDoubleAmount.get(stringValAtColIndex);
-					attrs[colIndex] = dub;
-					break;
-				case CONTINUOUS://will have to normalize after
-					double[] rangeAtCol = rangeAtColumn.get(colIndex);
-					double max = rangeAtCol[1];
-					double min = rangeAtCol[0];
-					double amountAtColIndex = Double.parseDouble(stringValAtColIndex);
-					attrs[colIndex] = (amountAtColIndex - min) / (max - min);
-					break;
-				case BINARY:
-					attrs[colIndex] = (double)binaryNameToIntSymbol.get(stringValAtColIndex);
-					break;
-				case CATEGORICAL:
-					attrs[colIndex] = (double)categoricalNameToIntSymbol.get(stringValAtColIndex);
-					break;
+
+	public Record digitRecordFromLines(List<String> lines) {
+		ArrayList<Double> vector = new ArrayList<>();
+		for (String line : lines) {
+			for (int index = 0; index < line.length(); index++) {
+				if (line.charAt(index) == '1') {
+					vector.add(1.0);
+				} else if (line.charAt(index) == '0') {
+					vector.add(0.0);
 				}
 			}
-			Record recordToAdd = new Record(attrs, null);
-			testRecords.add(recordToAdd);
 		}
-		return testRecords;
+		double[] arr = new double[vector.size()];
+		int i = 0;
+		for (Double dub : vector) {
+			arr[i++] = dub;
+		}
+		return new Record(arr, null);
 	}
 
 	private double distance(Record record1, Record record2) {
@@ -136,11 +135,11 @@ public class NearestNeighborClassifier {
 			switch (attrDataType) {
 			case BINARY:// simple matching coefficient
 				distances[i] = (int) record1.attrList[i] != (int) record2.attrList[i]
-						? BINARY_MATCHING_WEIGHT : 0;
+						? this.BINARY_MATCHING_WEIGHT : 0;
 				break;
 			case CATEGORICAL:
 				distances[i] = (int) record1.attrList[i] != (int) record2.attrList[i]
-						? CATEGORICAL_MATCHING_WEIGHT : 0;
+						? this.CATEGORICAL_MATCHING_WEIGHT : 0;
 				break;
 			case ORDINAL:
 				distances[i] = Math
@@ -159,44 +158,89 @@ public class NearestNeighborClassifier {
 		}
 		return Math.sqrt(sumOfSquares);
 	}
-	
-	public void loadDigitTrainingData(ArrayList<String> fileNames, ArrayList<String> labels){
+
+	public ArrayList<String> getAttributeList() {
+		return this.attributeList;
+	}
+
+	public int getNumberOfNearestNeighbors() {
+		return this.numberOfNearestNeighbors;
+	}
+
+	public ArrayList<Record> getRecords() {
+		return this.records;
+	}
+
+	public ArrayList<Record> getTestRecordsFromFile(String fileName)
+			throws Exception {
+		ArrayList<Record> testRecords = new ArrayList<>();
+		List<String> lines = Files.readAllLines(Paths.get(fileName),
+				Charset.defaultCharset());
+		for (int i = 0; i < lines.size(); i++) {
+			String line = lines.get(i);
+			String[] comps = line.split(" ");
+			double[] attrs = new double[comps.length];
+			for (int colIndex = 0; colIndex < comps.length; colIndex++) {
+				String stringValAtColIndex = comps[colIndex];
+				String typeOfAttr = this.attributeList.get(colIndex);
+				switch (typeOfAttr) {
+				case ORDINAL:
+					HashMap<String, Double> levelOfOrdinalToDoubleAmount = this.valsForOrdinalVarAtColumn
+							.get(colIndex);
+					double dub = levelOfOrdinalToDoubleAmount
+							.get(stringValAtColIndex);
+					attrs[colIndex] = dub;
+					break;
+				case CONTINUOUS:// will have to normalize after
+					double[] rangeAtCol = this.rangeAtColumn.get(colIndex);
+					double max = rangeAtCol[1];
+					double min = rangeAtCol[0];
+					double amountAtColIndex = Double
+							.parseDouble(stringValAtColIndex);
+					attrs[colIndex] = (amountAtColIndex - min) / (max - min);
+					break;
+				case BINARY:
+					attrs[colIndex] = this.binaryNameToIntSymbol
+							.get(stringValAtColIndex);
+					break;
+				case CATEGORICAL:
+					attrs[colIndex] = this.categoricalNameToIntSymbol
+							.get(stringValAtColIndex);
+					break;
+				}
+			}
+			Record recordToAdd = new Record(attrs, null);
+			testRecords.add(recordToAdd);
+		}
+		return testRecords;
+	}
+
+	public boolean isMajorityRule() {
+		return this.majorityRule;
+	}
+
+	public void loadDigitTrainingData(ArrayList<String> fileNames,
+			ArrayList<String> labels) {
 		this.numberOfNearestNeighbors = 3;
 		int fileNumber = 0;
-		for(String fileName:fileNames){
+		for (String fileName : fileNames) {
 			List<String> linesOfFile = null;
 			try {
 				linesOfFile = Files.readAllLines(Paths.get(fileName),
 						Charset.defaultCharset());
-			} catch (IOException e) {	e.printStackTrace();	}
-			
-			Record record = digitRecordFromLines(linesOfFile);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
+			Record record = this.digitRecordFromLines(linesOfFile);
 			record.label = labels.get(fileNumber);
-			records.add(record);
+			this.records.add(record);
 			fileNumber++;
 		}
-		
-		this.numberOfAttributes = records.get(0).numberOfAttributes();
+
+		this.numberOfAttributes = this.records.get(0).numberOfAttributes();
 		this.numberOfClasses = 4;
-		this.numberOfRecords = records.size();
-	}
-	public Record digitRecordFromLines(List<String> lines){
-		ArrayList<Double> vector = new ArrayList<>();
-		for(String line: lines){
-			for(int index = 0; index < line.length();index++){
-				if(line.charAt(index) == '1'){
-					vector.add(1.0);
-				}else if(line.charAt(index) == '0'){
-					vector.add(0.0);
-				}
-			}
-		}
-		double[] arr = new double[vector.size()];
-		int i = 0;
-		for(Double dub:vector){
-			arr[i++] = (double)dub;
-		}
-		return new Record(arr, null);
+		this.numberOfRecords = this.records.size();
 	}
 
 	public void loadTrainingData(String fileName) throws Exception {
@@ -205,7 +249,7 @@ public class NearestNeighborClassifier {
 				Charset.defaultCharset());
 		// first line
 		String[] componentsOfFirstLine = lines.get(0).split(whitespace);
-		
+
 		this.numberOfRecords = Integer.parseInt(componentsOfFirstLine[0]);
 		this.numberOfAttributes = Integer.parseInt(componentsOfFirstLine[1]);
 		this.numberOfClasses = Integer.parseInt(componentsOfFirstLine[2]);
@@ -228,11 +272,11 @@ public class NearestNeighborClassifier {
 						"attribute in file not one of the correct attributes");
 			}
 		}
-		//for binary variables
+		// for binary variables
 		int binaryVariableCounter = 0;
-		//for categorical variables
+		// for categorical variables
 		int categoricalVariableCounter = 0;
-		
+
 		// fourth line reading the ranges of the attribute types
 		// uses rangeAtColumn hash map
 		String[] listOfRanges = lines.get(3).split(whitespace);
@@ -246,7 +290,7 @@ public class NearestNeighborClassifier {
 				// range symbols are low to high
 				int index = 0;
 				for (String symbol : strRange) {
-					range[index] = (double)index / (strRange.length - 1);
+					range[index] = (double) index / (strRange.length - 1);
 					if (this.valsForOrdinalVarAtColumn.containsKey(colIndex)) {
 						HashMap<String, Double> map = this.valsForOrdinalVarAtColumn
 								.get(colIndex);
@@ -266,14 +310,16 @@ public class NearestNeighborClassifier {
 				this.rangeAtColumn.put(colIndex, range);
 				break;
 			case BINARY:
-				for(String binaryName: strRange){
-					binaryNameToIntSymbol.put(binaryName, binaryVariableCounter);
+				for (String binaryName : strRange) {
+					this.binaryNameToIntSymbol.put(binaryName,
+							binaryVariableCounter);
 					binaryVariableCounter++;
 				}
 				break;// do later because first file doesn't have binary
 			case CATEGORICAL:
-				for(String categoricalName: strRange){
-					categoricalNameToIntSymbol.put(categoricalName, categoricalVariableCounter);
+				for (String categoricalName : strRange) {
+					this.categoricalNameToIntSymbol.put(categoricalName,
+							categoricalVariableCounter);
 					categoricalVariableCounter++;
 				}
 				break;
@@ -285,38 +331,45 @@ public class NearestNeighborClassifier {
 			String[] comps = line.split(whitespace);
 			double[] attrs = new double[comps.length - 1];
 			String label = comps[comps.length - 1];
-			for(int colIndex = 0; colIndex < comps.length - 1; colIndex++){
+			for (int colIndex = 0; colIndex < comps.length - 1; colIndex++) {
 				String stringValAtColIndex = comps[colIndex];
-				String typeOfAttr = attributeList.get(colIndex);
+				String typeOfAttr = this.attributeList.get(colIndex);
 				switch (typeOfAttr) {
 				case ORDINAL:
-					HashMap<String, Double> levelOfOrdinalToDoubleAmount = valsForOrdinalVarAtColumn.get(colIndex);
-					double dub = levelOfOrdinalToDoubleAmount.get(stringValAtColIndex);
+					HashMap<String, Double> levelOfOrdinalToDoubleAmount = this.valsForOrdinalVarAtColumn
+							.get(colIndex);
+					double dub = levelOfOrdinalToDoubleAmount
+							.get(stringValAtColIndex);
 					attrs[colIndex] = dub;
 					break;
-				case CONTINUOUS://will have to normalize after
-					double amountAtColIndex = Double.parseDouble(stringValAtColIndex);
+				case CONTINUOUS:// will have to normalize after
+					double amountAtColIndex = Double
+							.parseDouble(stringValAtColIndex);
 					attrs[colIndex] = amountAtColIndex;
 					break;
 				case BINARY:
-					attrs[colIndex] = (double)binaryNameToIntSymbol.get(stringValAtColIndex);
+					attrs[colIndex] = this.binaryNameToIntSymbol
+							.get(stringValAtColIndex);
 					break;
 				case CATEGORICAL:
-					attrs[colIndex] = (double)categoricalNameToIntSymbol.get(stringValAtColIndex);
+					attrs[colIndex] = this.categoricalNameToIntSymbol
+							.get(stringValAtColIndex);
 					break;
 				}
 			}
 			Record recordToAdd = new Record(attrs, label);
-			records.add(recordToAdd);
+			this.records.add(recordToAdd);
 		}
-		//normalizing continuous variables in records so that they range from 0 to 1
-		for(Record record: records){
-			for(int index = 0; index < record.attrList.length;index++){
-				if(attributeList.get(index).equals(CONTINUOUS)){
-					double[] rangeAtCol = rangeAtColumn.get(index);
+		// normalizing continuous variables in records so that they range from 0
+		// to 1
+		for (Record record : this.records) {
+			for (int index = 0; index < record.attrList.length; index++) {
+				if (this.attributeList.get(index).equals(CONTINUOUS)) {
+					double[] rangeAtCol = this.rangeAtColumn.get(index);
 					double max = rangeAtCol[1];
 					double min = rangeAtCol[0];
-					record.attrList[index] = (record.attrList[index] - min) / (max - min);
+					record.attrList[index] = (record.attrList[index] - min)
+							/ (max - min);
 				}
 			}
 		}
@@ -333,10 +386,37 @@ public class NearestNeighborClassifier {
 			}
 		}
 
-		int maxFreq = -1;
+		double maxFreq = -1;
 		String maxLabel = null;
 		for (String labelKey : labelFrequencies.keySet()) {
 			if (labelFrequencies.get(labelKey) > maxFreq) {
+				maxFreq = labelFrequencies.get(labelKey);
+				maxLabel = labelKey;
+			}
+		}
+		assert maxLabel != null;
+		return maxLabel;
+	}
+
+	private String majorityLabelWeighted(ArrayList<Record> records,
+			ArrayList<Double> distances) {
+		HashMap<String, Double> labelWeights = new HashMap<>();
+		int index = 0;
+		for (Record record : records) {
+			Double theDistance = distances.get(index);
+			if (labelWeights.containsKey(record.label)) {
+				labelWeights.put(record.label,
+						labelWeights.get(record.label) + 1.0 / theDistance);
+			} else {
+				labelWeights.put(record.label, 1.0 / theDistance);
+			}
+		}
+
+		double maxWeight = Double.MIN_VALUE;
+		String maxLabel = null;
+		for (String labelKey : labelWeights.keySet()) {
+			if (labelWeights.get(labelKey) > maxWeight) {
+				maxWeight = labelWeights.get(labelKey);
 				maxLabel = labelKey;
 			}
 		}
@@ -376,35 +456,13 @@ public class NearestNeighborClassifier {
 		}
 		return nearestNeighbors;
 	}
-	
-	public double calculateTrainingError(){
-		int numberOfMissclassifiedRecords = 0;
-		ArrayList<String> predictedLabels = classify(records);
-		assert predictedLabels.size() == records.size();
-		int rowIndex = 0;
-		for(Record record: records){
-			if(record.label.equals(predictedLabels.get(rowIndex)) == false){
-				numberOfMissclassifiedRecords++;
-			}
-			rowIndex++;
-		}
-		return (double)numberOfMissclassifiedRecords / records.size();
+
+	public void setMajorityRule(boolean majorityRule) {
+		this.majorityRule = majorityRule;
 	}
-	
-	public double calculateTrainingErrorWithLeaveOneOut(){
-		int numberOfMissclassifiedRecords = 0;
-		//ArrayList<String> predictedLabels = new ArrayList<String>();
-		for(int index = 0; index < records.size();index++){
-			Record recordToClassify = records.remove(index);
-			ArrayList<Record> recordInList = new ArrayList<>();
-			recordInList.add(recordToClassify);
-			String label = classify(recordInList).get(0);
-			if(recordToClassify.label.equals(label) == false){
-				numberOfMissclassifiedRecords++;
-			}
-			records.add(0, recordToClassify);
-		}
-		return (double)numberOfMissclassifiedRecords / records.size();
+
+	public void setNumberOfNearestNeighbors(int numberOfNearestNeighbors) {
+		this.numberOfNearestNeighbors = numberOfNearestNeighbors;
 	}
 
 	@Override
@@ -419,6 +477,23 @@ public class NearestNeighborClassifier {
 		}
 		sBuffer.deleteCharAt(sBuffer.length() - 1);
 		return sBuffer.toString();
+	}
+
+	public void writeClassifiedLabelsToFile(String fileName,
+			ArrayList<String> labels) {
+		PrintWriter pw = null;
+		try {
+			pw = new PrintWriter(fileName);
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		}
+		StringBuffer sBuffer = new StringBuffer("");
+		for (String label : labels) {
+			sBuffer.append(label + "\n");
+		}
+		sBuffer.delete(sBuffer.length() - 1, sBuffer.length());
+		pw.write(sBuffer.toString());
+		pw.close();
 	}
 
 }
